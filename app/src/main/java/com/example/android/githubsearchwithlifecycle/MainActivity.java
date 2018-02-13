@@ -22,12 +22,16 @@ public class MainActivity extends AppCompatActivity implements GitHubSearchAdapt
 
     private final static String TAG = MainActivity.class.getSimpleName();
 
+    private final static String SEARCH_RESULTS_LIST_KEY = "savedSearchResults";
+
     private RecyclerView mSearchResultsRV;
     private EditText mSearchBoxET;
     private GitHubSearchAdapter mGitHubSearchAdapter;
     private ProgressBar mLoadingProgressBar;
     private TextView mLoadingErrorMessage;
     private Toast mToast;
+
+    private ArrayList<GitHubUtils.SearchResult> mSearchResults;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -56,6 +60,11 @@ public class MainActivity extends AppCompatActivity implements GitHubSearchAdapt
                 }
             }
         });
+
+        if (savedInstanceState != null && savedInstanceState.containsKey(SEARCH_RESULTS_LIST_KEY)) {
+            mSearchResults = (ArrayList<GitHubUtils.SearchResult>) savedInstanceState.getSerializable(SEARCH_RESULTS_LIST_KEY);
+            mGitHubSearchAdapter.updateSearchResults(mSearchResults);
+        }
     }
 
     private void doGitHubSearch(String searchQuery) {
@@ -69,6 +78,14 @@ public class MainActivity extends AppCompatActivity implements GitHubSearchAdapt
         Intent detailedSearchResultIntent = new Intent(this, SearchResultDetailActivity.class);
         detailedSearchResultIntent.putExtra(GitHubUtils.EXTRA_SEARCH_RESULT, searchResult);
         startActivity(detailedSearchResultIntent);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (mSearchResults != null) {
+            outState.putSerializable(SEARCH_RESULTS_LIST_KEY, mSearchResults);
+        }
     }
 
     public class GitHubSearchTask extends AsyncTask<String, Void, String> {
@@ -96,8 +113,8 @@ public class MainActivity extends AppCompatActivity implements GitHubSearchAdapt
         protected void onPostExecute(String s) {
             mLoadingProgressBar.setVisibility(View.INVISIBLE);
             if (s != null) {
-                ArrayList<GitHubUtils.SearchResult> searchResultsList = GitHubUtils.parseSearchResultsJSON(s);
-                mGitHubSearchAdapter.updateSearchResults(searchResultsList);
+                mSearchResults = GitHubUtils.parseSearchResultsJSON(s);
+                mGitHubSearchAdapter.updateSearchResults(mSearchResults);
                 mLoadingErrorMessage.setVisibility(View.INVISIBLE);
                 mSearchResultsRV.setVisibility(View.VISIBLE);
             } else {
