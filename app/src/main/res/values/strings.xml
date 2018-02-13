@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Lifecycle Enabled GitHub Search</string>
+
+    <string name="loading_error_message">Failed to execute your search.  Check your internet connection.</string>
+
+    <string name="action_share">Share</string>
+    <string name="action_view_repo">View repo on GitHub</string>
+
+    <string name="share_chooser_title">Choose an app to share this repo</string>
+    <string name="share_text_prefix">Check out this GitHub repo I found</string>
+</resources>
