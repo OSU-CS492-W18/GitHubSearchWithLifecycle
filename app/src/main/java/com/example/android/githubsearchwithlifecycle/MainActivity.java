@@ -1,7 +1,9 @@
 package com.example.android.githubsearchwithlifecycle;
 
 import android.content.Intent;
-import android.os.AsyncTask;
+import android.support.v4.app.LoaderManager;
+import android.support.v4.content.AsyncTaskLoader;
+import android.support.v4.content.Loader;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.LinearLayoutManager;
@@ -13,25 +15,24 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import java.io.IOException;
 import java.util.ArrayList;
 
-public class MainActivity extends AppCompatActivity implements GitHubSearchAdapter.OnSearchItemClickListener {
+public class MainActivity extends AppCompatActivity
+        implements GitHubSearchAdapter.OnSearchItemClickListener, LoaderManager.LoaderCallbacks<String> {
 
     private final static String TAG = MainActivity.class.getSimpleName();
 
-    private final static String SEARCH_RESULTS_LIST_KEY = "savedSearchResults";
+    private final static String SEARCH_URL_KEY = "githubSearchURL";
+
+    private final static int GITHUB_SEARCH_LOADER_ID = 0;
 
     private RecyclerView mSearchResultsRV;
     private EditText mSearchBoxET;
     private GitHubSearchAdapter mGitHubSearchAdapter;
     private ProgressBar mLoadingProgressBar;
     private TextView mLoadingErrorMessage;
-    private Toast mToast;
-
-    private ArrayList<GitHubUtils.SearchResult> mSearchResults;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,16 +62,14 @@ public class MainActivity extends AppCompatActivity implements GitHubSearchAdapt
             }
         });
 
-        if (savedInstanceState != null && savedInstanceState.containsKey(SEARCH_RESULTS_LIST_KEY)) {
-            mSearchResults = (ArrayList<GitHubUtils.SearchResult>) savedInstanceState.getSerializable(SEARCH_RESULTS_LIST_KEY);
-            mGitHubSearchAdapter.updateSearchResults(mSearchResults);
-        }
+        getSupportLoaderManager().initLoader(GITHUB_SEARCH_LOADER_ID, null, this);
     }
 
     private void doGitHubSearch(String searchQuery) {
         String githubSearchURL = GitHubUtils.buildGitHubSearchURL(searchQuery);
-        Log.d(TAG, "querying search URL: " + githubSearchURL);
-        new GitHubSearchTask().execute(githubSearchURL);
+        Bundle args = new Bundle();
+        args.putString(SEARCH_URL_KEY, githubSearchURL);
+        getSupportLoaderManager().restartLoader(GITHUB_SEARCH_LOADER_ID, args, this);
     }
 
     @Override
@@ -81,46 +80,67 @@ public class MainActivity extends AppCompatActivity implements GitHubSearchAdapt
     }
 
     @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        if (mSearchResults != null) {
-            outState.putSerializable(SEARCH_RESULTS_LIST_KEY, mSearchResults);
+    public Loader<String> onCreateLoader(int id, final Bundle args) {
+        return new AsyncTaskLoader<String>(this) {
+
+            String mSearchResultsJSON;
+
+            @Override
+            protected void onStartLoading() {
+                if (args != null) {
+                    if (mSearchResultsJSON != null) {
+                        Log.d(TAG, "loader returning cached results");
+                        deliverResult(mSearchResultsJSON);
+                    } else {
+                        mLoadingProgressBar.setVisibility(View.VISIBLE);
+                        forceLoad();
+                    }
+                }
+            }
+
+            @Override
+            public String loadInBackground() {
+                if (args != null) {
+                    String githubSearchURL = args.getString(SEARCH_URL_KEY);
+
+                    Log.d(TAG, "loading results from GitHub with URL: " + githubSearchURL);
+                    String searchResults = null;
+                    try {
+                        searchResults = NetworkUtils.doHTTPGet(githubSearchURL);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    return searchResults;
+                } else {
+                    return null;
+                }
+            }
+
+            @Override
+            public void deliverResult(String data) {
+                mSearchResultsJSON = data;
+                super.deliverResult(data);
+            }
+        };
+    }
+
+    @Override
+    public void onLoadFinished(Loader<String> loader, String data) {
+        mLoadingProgressBar.setVisibility(View.INVISIBLE);
+        Log.d(TAG, "loader finished loading");
+        if (data != null) {
+            ArrayList<GitHubUtils.SearchResult> searchResults = GitHubUtils.parseSearchResultsJSON(data);
+            mGitHubSearchAdapter.updateSearchResults(searchResults);
+            mLoadingErrorMessage.setVisibility(View.INVISIBLE);
+            mSearchResultsRV.setVisibility(View.VISIBLE);
+        } else {
+            mSearchResultsRV.setVisibility(View.INVISIBLE);
+            mLoadingErrorMessage.setVisibility(View.VISIBLE);
         }
     }
 
-    public class GitHubSearchTask extends AsyncTask<String, Void, String> {
-
-        @Override
-        protected void onPreExecute() {
-            super.onPreExecute();
-            mLoadingProgressBar.setVisibility(View.VISIBLE);
-        }
-
-        @Override
-        protected String doInBackground(String... urls) {
-            String githubSearchURL = urls[0];
-
-            String searchResults = null;
-            try {
-                searchResults = NetworkUtils.doHTTPGet(githubSearchURL);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            return searchResults;
-        }
-
-        @Override
-        protected void onPostExecute(String s) {
-            mLoadingProgressBar.setVisibility(View.INVISIBLE);
-            if (s != null) {
-                mSearchResults = GitHubUtils.parseSearchResultsJSON(s);
-                mGitHubSearchAdapter.updateSearchResults(mSearchResults);
-                mLoadingErrorMessage.setVisibility(View.INVISIBLE);
-                mSearchResultsRV.setVisibility(View.VISIBLE);
-            } else {
-                mSearchResultsRV.setVisibility(View.INVISIBLE);
-                mLoadingErrorMessage.setVisibility(View.VISIBLE);
-            }
-        }
+    @Override
+    public void onLoaderReset(Loader<String> loader) {
+        // Nothing to do...
     }
 }
