@@ -1,5 +1,6 @@
 package com.example.android.githubsearchwithlifecycle;
 
+import android.content.Context;
 import android.content.Intent;
 import android.support.v4.app.LoaderManager;
 import android.support.v4.content.AsyncTaskLoader;
@@ -69,6 +70,7 @@ public class MainActivity extends AppCompatActivity
         String githubSearchURL = GitHubUtils.buildGitHubSearchURL(searchQuery);
         Bundle args = new Bundle();
         args.putString(SEARCH_URL_KEY, githubSearchURL);
+        mLoadingProgressBar.setVisibility(View.VISIBLE);
         getSupportLoaderManager().restartLoader(GITHUB_SEARCH_LOADER_ID, args, this);
     }
 
@@ -80,48 +82,12 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override
-    public Loader<String> onCreateLoader(int id, final Bundle args) {
-        return new AsyncTaskLoader<String>(this) {
-
-            String mSearchResultsJSON;
-
-            @Override
-            protected void onStartLoading() {
-                if (args != null) {
-                    if (mSearchResultsJSON != null) {
-                        Log.d(TAG, "loader returning cached results");
-                        deliverResult(mSearchResultsJSON);
-                    } else {
-                        mLoadingProgressBar.setVisibility(View.VISIBLE);
-                        forceLoad();
-                    }
-                }
-            }
-
-            @Override
-            public String loadInBackground() {
-                if (args != null) {
-                    String githubSearchURL = args.getString(SEARCH_URL_KEY);
-
-                    Log.d(TAG, "loading results from GitHub with URL: " + githubSearchURL);
-                    String searchResults = null;
-                    try {
-                        searchResults = NetworkUtils.doHTTPGet(githubSearchURL);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                    return searchResults;
-                } else {
-                    return null;
-                }
-            }
-
-            @Override
-            public void deliverResult(String data) {
-                mSearchResultsJSON = data;
-                super.deliverResult(data);
-            }
-        };
+    public Loader<String> onCreateLoader(int id, Bundle args) {
+        String githubSearchURL = null;
+        if (args != null) {
+            githubSearchURL = args.getString(SEARCH_URL_KEY);
+        }
+        return new GitHubSearchLoader(this, githubSearchURL);
     }
 
     @Override
@@ -142,5 +108,49 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onLoaderReset(Loader<String> loader) {
         // Nothing to do...
+    }
+
+    static class GitHubSearchLoader extends AsyncTaskLoader<String> {
+        String mSearchResultsJSON;
+        String mGitHubSearchURL;
+
+        GitHubSearchLoader(Context context, String url) {
+            super(context);
+            mGitHubSearchURL = url;
+        }
+
+        @Override
+        protected void onStartLoading() {
+            if (mGitHubSearchURL != null) {
+                if (mSearchResultsJSON != null) {
+                    Log.d(TAG, "loader returning cached results");
+                    deliverResult(mSearchResultsJSON);
+                } else {
+                    forceLoad();
+                }
+            }
+        }
+
+        @Override
+        public String loadInBackground() {
+            if (mGitHubSearchURL != null) {
+                Log.d(TAG, "loading results from GitHub with URL: " + mGitHubSearchURL);
+                String searchResults = null;
+                try {
+                    searchResults = NetworkUtils.doHTTPGet(mGitHubSearchURL);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                return searchResults;
+            } else {
+                return null;
+            }
+        }
+
+        @Override
+        public void deliverResult(String data) {
+            mSearchResultsJSON = data;
+            super.deliverResult(data);
+        }
     }
 }
